@@ -4,6 +4,8 @@ There are 3 flags to capture from 0-2.
 
 ![Homepage](imgs/1_gallery.jpg "Homepage")
 
+## FLAG1
+
 Three images are shown, the third does not load. ```Space used: 0 total``` at the bottom is also peculiar.
 
 The image sources show that they are fetched via a GET argument on ```/fetch```:
@@ -85,6 +87,8 @@ Table: albums
 ```
 
 #### FLAG1 is captured.
+
+## FLAG0
 
 These tables reveal how the SQL query is likely structured. The backend receives an id parameter from ```fetch?id=[]```, which is then used in a ```WHERE``` clause i.e. ```WHERE id=[]```. The filename is likely selected in this query, which is then used to open the file at the filename and return the contents. This explains why ```fetch?id=3``` yielded a 500 error, since there is no file with a name of ```FLAG1``` and therefore failed when trying to open that filename. Also, previously successfully injecting comments indicates that this ```WHERE id=[]``` clause is possibly at the end of the query.
 
@@ -210,6 +214,8 @@ if __name__ == "__main__":
 ```
 
 ##### FLAG0 is captured.
+
+## FLAG2
 
 Looking through ```main.py```, some non-parameterzied SQL queries are evident, which have already been exploited to reach this point. However, very significantly a system call is made with no input sanitation or validation in the ```Space used:``` portion of the webapp:
 

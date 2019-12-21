@@ -49,7 +49,7 @@ Doing this deduced the password, and upon using it to logon, yielded ```FLAG2```
 
 (Alternate solution than what follows: Upon reviewing the hints, it suggests using a ```UNION``` injection. Therefore, ```UNION``` can be leveraged with keyword ```AS``` to get password from an alias rather than from the actual table e.g. Username: ```' UNION SELECT '1234' as password-- ``` and Password: ```1234``` successfully logs in and allows the viewing of private ```/page/3```. This is much simpler than the exploit that sqlmap found.)
 
-This ```IF``` statement query used to find ```FLAG2``` can be exploited further on ```information_schema.tables``` to get the databases and tables using columns ```TABLE_SCHEMA``` and ```TABLE_NAME```, but given the large search space this would be very time consuming.
+The ```IF``` statement query used to find ```FLAG2``` can be exploited further on ```information_schema.tables``` to get the names of databases and tables using columns ```TABLE_SCHEMA``` and ```TABLE_NAME```, but given the large search space this would be very time consuming.
 
 So to save time, try sqlmap on the login form with ```--risk=3``` to try to find a better exploit, which found:
 

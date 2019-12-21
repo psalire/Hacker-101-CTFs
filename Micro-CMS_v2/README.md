@@ -29,11 +29,11 @@ The query used is ```SELECT password FROM admins WHERE username=\'%s\''``` and t
 
 Before using sqlmap, try exploit it manually, which is less intrusive and can yield different results, some of which sqlmap may miss.
 
-Entering Username: ```'-- ``` yields ```Unknown user``` error. Entering Username ```' or 1=1-- ``` yields ```Invalid password``` error.
+Entering Username: ```'-- ``` yields an ```Unknown user``` error. Entering Username ```' or 1=1-- ``` yields an ```Invalid password``` error.
 
 These error messages can be exploited to find valid usernames and passwords. E.g. to determine the length of the password of a valid password:
 
-Entering Username: ```' or IF(length(password)<10, TRUE, FALSE)-- ```
+Username: ```' or IF(length(password)<10, TRUE, FALSE)-- ```
 
 This query results in error message ```Invalid password```, indicating that the ```IF``` statement returned true, which confirms that the length of the password is less than 10. Similarly, if the error message ```Unknown user``` is shown, it indicates that the ```IF``` statement returned false. Using this query, it is deduced that the length of the password is ```7```.
 

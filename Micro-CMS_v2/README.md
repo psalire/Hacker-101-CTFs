@@ -10,7 +10,7 @@ There are 3 flags to capture from 0-2.
 
 ## FLAG2
 
-Navigating the site, pages 1-3 exist, but page 3 (```/page/3```) shows a permission error. All links lead eventually to the login page:
+Navigating the site, pages 1-3 exist, but page 3 (```/page/3```) shows a permission error and all links lead eventually to the login page:
 
 ![Login](imgs/1_mcms2.jpg "Login")
 
@@ -27,31 +27,31 @@ Enter a single quote ```'``` into the ```Username:``` field shows that it is vul
 
 The query used is ```SELECT password FROM admins WHERE username=\'%s\''``` and the DBMS is MySQL.
 
-Before pulling out sqlmap, try exploit it manually, which is less intrusive and can yield different results, some of which sqlmap may miss.
+Before using sqlmap, try exploit it manually, which is less intrusive and can yield different results, some of which sqlmap may miss.
 
-Entering Username ```'-- ``` (note that a space if required after the comment in MySQL) yields ```Unknown user``` error. Entering Username ```' or 1=1-- ``` yields ```Invalid password``` error.
+Entering Username: ```'-- ``` yields ```Unknown user``` error. Entering Username ```' or 1=1-- ``` yields ```Invalid password``` error.
 
-These error messages can be exploited to find valid usernames and passwords, though the username is bypassable making the ```Username``` field true. E.g. to determine the length of the password:
+These error messages can be exploited to find valid usernames and passwords. E.g. to determine the length of the password of a valid password:
 
-Entering Username ```' or IF(length(password)<10, TRUE, FALSE)-- ```
+Entering Username: ```' or IF(length(password)<10, TRUE, FALSE)-- ```
 
-This query returns ```Invalid password```, indicating that the ```IF``` statement returned true, meaning the length of the password is less than 10. Likewise, ```Unknown user``` indicates that the ```IF``` statement returned false. Continuing testing this query , it is determined that the length of the password is ```7```.
+This query results in error message ```Invalid password```, indicating that the ```IF``` statement returned true, which confirms that the length of the password is less than 10. Similarly, if the error message ```Unknown user``` is shown, it indicates that the ```IF``` statement returned false. Using this query, it is deduced that the length of the password is ```7```.
 
-Now, each character in the password can be found by another ```IF``` condition with query ```' or IF(substring(password,1,1)='x', TRUE, FALSE)-- ```. Here, the first character in the password is tested to see if it equals ```'x'```. By testing all characters until character 7 (the length found earlier) and seeing if the ```Invalid password``` error is shown to see if the character is correct, the password can be found. Write a script or use Burp Intruder to automate this. 
+Now, each character in the password can similarly be found using the ```substring()``` function: ```' or IF(substring(password,1,1)='x', TRUE, FALSE)-- ```. Here, the first character in the password is tested to see if it equals ```'x'```. By testing all characters until character 7 (the length found earlier) and seeing if the ```Invalid password``` error is shown to see if the character is correct, the password can be found. Write a script or use Burp Intruder to automate this. 
 
 E.g. find the first character with ```' or IF(substring(password,1,1)='TEST_CHAR_HERE', TRUE, FALSE)-- ```, the second character with ```' or IF(substring(password,2,1)='TEST_CHAR_HERE', TRUE, FALSE)-- ```, and so on until ```(substring(password,7,1)```.
 
-Doing this deduced the password, and upon using it to logon, yielded ```FLAG1```.
+Doing this deduced the password, and upon using it to logon, yielded ```FLAG2```.
 
 #### FLAG2 is captured.
 
 ## FLAG0
 
-(Alternate solution than what follows: Upon reviewing the hints, it suggests using a ```UNION``` injection. Therefore, ```UNION``` can be leveraged with keyword ```AS``` to get password from an alias rather than from the actual table e.g. Username: ```' UNION SELECT '1234' as password-- ``` and Password: ```1234``` successfully logs in and allows the viewing of private ```/page/3```. This is much simpler than the sqlmap exploit.)
+(Alternate solution than what follows: Upon reviewing the hints, it suggests using a ```UNION``` injection. Therefore, ```UNION``` can be leveraged with keyword ```AS``` to get password from an alias rather than from the actual table e.g. Username: ```' UNION SELECT '1234' as password-- ``` and Password: ```1234``` successfully logs in and allows the viewing of private ```/page/3```. This is much simpler than the exploit that sqlmap found.)
 
-This ```IF``` query used to find ```FLAG2``` can be exploited further on ```information_schema.tables``` to get the databases and tables using columns ```TABLE_SCHEMA``` and ```TABLE_NAME```, but given the large search space this would be very time consuming.
+This ```IF``` statement query used to find ```FLAG2``` can be exploited further on ```information_schema.tables``` to get the databases and tables using columns ```TABLE_SCHEMA``` and ```TABLE_NAME```, but given the large search space this would be very time consuming.
 
-So, try sqlmap on the login form with ```--risk=3``` to try to find a better exploit, which found:
+So to save time, try sqlmap on the login form with ```--risk=3``` to try to find a better exploit, which found:
 
 >Parameter: username (POST)
 >    Type: error-based
@@ -62,7 +62,7 @@ So, try sqlmap on the login form with ```--risk=3``` to try to find a better exp
 >    Title: MySQL >= 5.0.12 AND time-based blind (query SLEEP)
 >    Payload: username=yZPi' AND (SELECT 6535 FROM (SELECT(SLEEP(5)))ExUj) AND 'cIlM'='cIlM&password=
 
-Two exploits found: One exploit leverages the error message, the other leverages a blind time-based query to deduce data. Use this to dump to DBs:
+Two exploits found: One exploit leverages the error message, the other leverages a blind time-based query to deduce data. Use these to dump to DBs:
 
 >web server operating system: Linux Ubuntu
 >web application technology: Nginx 1.14.0

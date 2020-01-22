@@ -97,7 +97,7 @@ Table: pages
 
 DB ```level2``` contains the contents of each page, including the private page ```/page/3``` which contains FLAG0.
 
-(Alternate solution: Upon reviewing the hints, it suggests using a ```UNION``` injection. Therefore, ```UNION``` can be leveraged with keyword ```AS``` to get password from an alias rather than from the actual table e.g. Username: ```' UNION SELECT '1234' as password-- ``` and Password: ```1234``` successfully logs in and allows the viewing of private ```/page/3```. This is much simpler than the exploit that sqlmap found as seen in the following paragraphs.)
+(Alternate solution: Upon reviewing the hints, it suggests using a ```UNION``` injection. Therefore, ```UNION``` can be leveraged with keyword ```AS``` to get password from an alias rather than from the actual table e.g. Username: ```' UNION SELECT '1234' as password-- ``` and Password: ```1234``` successfully logs in and allows the viewing of private ```/page/3```. This is much simpler than the exploit that sqlmap had found.)
 
 #### FLAG0 is captured.
 

@@ -31,17 +31,15 @@ The query used is ```SELECT password FROM admins WHERE username=\'%s\''``` and t
 
 Before using sqlmap, try exploit it manually, which is less intrusive and can yield different results, some of which sqlmap may miss.
 
-Entering Username: ```'-- ``` yields an ```Unknown user``` error. Entering Username ```' or 1=1-- ``` yields an ```Invalid password``` error.
-
-These error messages reflect the TRUE and FALSE values of the entries and can be exploited to find valid usernames and passwords. E.g. to determine the length of the password of a valid password:
+Entering Username: ```'-- ``` yields an ```Unknown user``` error. Entering Username ```' or 1=1-- ``` yields an ```Invalid password``` error. These error messages reflect the TRUE and FALSE values of the entries and can be exploited to find valid usernames and passwords. E.g. to determine the length of the password of a valid password:
 
 Username: ```' or IF(length(password)<10, TRUE, FALSE)-- ```
 
-This query results in error message ```Invalid password```, indicating that the ```IF``` statement returned TRUE, which confirms that the length of the password is less than 10. Similarly, if the error message ```Unknown user``` is shown, it indicates that the ```IF``` statement returned FALSE. Using this query, it is deduced that the length of the password is ```7```.
+This query results in error message ```Invalid password```, indicating that the ```IF``` statement returned TRUE, which confirms that the length of the password is less than 10. Similarly, if the error message ```Unknown user``` is shown, it indicates that the ```IF``` statement returned FALSE. Using this query and testing for a length that is TRUE, it is found that the length of the password is ```7```.
 
-Now, each character in the password can similarly be found using the ```substring()``` function: ```' or IF(substring(password,1,1)='x', TRUE, FALSE)-- ```. Here, the first character in the password is tested to see if it equals ```'x'```. By testing all characters against each character in the password (until character 7, the length found earlier) and seeing if the ```Invalid password``` error is shown to see if the character is correct, the password can be found. Write a script or use Burp Intruder to automate this. 
+Now, each character in the password can similarly be found using ```substring()```: ```' or IF(substring(password,1,1)='x', TRUE, FALSE)-- ```. Here, the first character in the password is tested to see if it equals ```'x'```. By testing all characters against each of the 7 characters in the password and seeing if the ```Invalid password``` error is shon which means it returned TRUE, the password can be found. Write a script or use Burp Intruder to automate this.
 
-E.g. find the first character with ```' or IF(substring(password,1,1)='TEST_CHAR_HERE', TRUE, FALSE)-- ```, the second character with ```' or IF(substring(password,2,1)='TEST_CHAR_HERE', TRUE, FALSE)-- ```, and so on until ```(substring(password,7,1)```, where ```TEST_CHAR_HERE``` is a single character checked for a match.
+E.g. to check if first character an arbritrary value of ```a```: ```' or IF(substring(password,1,1)='a', TRUE, FALSE)-- ```; to check if the second character is ```b```: ```' or IF(substring(password,2,1)='b', TRUE, FALSE)-- ```; and so on until the last character i.e.```(substring(password,7,1)```.
 
 Doing this deduced the password, and upon using it to logon, yielded ```FLAG2```.
 
@@ -113,7 +111,7 @@ This seems to point to HTTP methods. Try changing the method on pages that requi
 
 Change ```GET /x/page/edit/2 HTTP/1.1``` to ```POST /x/page/edit/2 HTTP/1.1```
 
-This emphasizes the fact that successful attacks emerge from unintended or unexpected input by the developer of the site. Here, a POST request is not expected and thus not protected against by the developer.
+This emphasizes the fact that successful attacks most commonly emerge from unintended or unexpected input by the developer of the site. Here, a POST request is sent where a GET request is expected and bypasses security measures that exist in the expected GET request.
 
 #### FLAG1 is captured.
 

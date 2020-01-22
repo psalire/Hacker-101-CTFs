@@ -37,17 +37,15 @@ Username: ```' or IF(length(password)<10, TRUE, FALSE)-- ```
 
 This query results in error message ```Invalid password```, indicating that the ```IF``` statement returned TRUE, which confirms that the length of the password is less than 10. Similarly, if the error message ```Unknown user``` is shown, it indicates that the ```IF``` statement returned FALSE. Using this query and testing for a length that is TRUE, it is found that the length of the password is ```7```.
 
-Now, each character in the password can similarly be found using ```substring()```: ```' or IF(substring(password,1,1)='x', TRUE, FALSE)-- ```. Here, the first character in the password is tested to see if it equals ```'x'```. By testing all characters against each of the 7 characters in the password and seeing if the ```Invalid password``` error is shon which means it returned TRUE, the password can be found. Write a script or use Burp Intruder to automate this.
+Now, each character in the password can similarly be found using ```substring()```: ```' or IF(substring(password,1,1)='x', TRUE, FALSE)-- ```. Here, the first character in the password is tested to see if it equals ```'x'```. By testing all characters against each of the 7 characters in the password and seeing if the ```Invalid password``` error is shown which means it returned TRUE, the password can be found. Write a script or use Burp Intruder to automate this.
 
-E.g. to check if first character an arbritrary value of ```a```: ```' or IF(substring(password,1,1)='a', TRUE, FALSE)-- ```; to check if the second character is ```b```: ```' or IF(substring(password,2,1)='b', TRUE, FALSE)-- ```; and so on until the last character i.e.```(substring(password,7,1)```.
+E.g. to check if first character for an arbritrary value of ```a```: ```' or IF(substring(password,1,1)='a', TRUE, FALSE)-- ```; to check if the second character is ```b```: ```' or IF(substring(password,2,1)='b', TRUE, FALSE)-- ```; and so on until the last character i.e.```(substring(password,7,1)```.
 
 Doing this deduced the password, and upon using it to logon, yielded ```FLAG2```.
 
 #### FLAG2 is captured.
 
 ## FLAG0
-
-(Alternate solution than what follows: Upon reviewing the hints, it suggests using a ```UNION``` injection. Therefore, ```UNION``` can be leveraged with keyword ```AS``` to get password from an alias rather than from the actual table e.g. Username: ```' UNION SELECT '1234' as password-- ``` and Password: ```1234``` successfully logs in and allows the viewing of private ```/page/3```. This is much simpler than the exploit that sqlmap found as seen in the following paragraphs.)
 
 The ```IF``` statement query used to find ```FLAG2``` can be exploited further on ```information_schema.tables``` to get the names of databases and tables using columns ```TABLE_SCHEMA``` and ```TABLE_NAME```, but given the large search space this would be very time consuming.
 
@@ -98,6 +96,8 @@ Table: pages
 ```
 
 DB ```level2``` contains the contents of each page, including the private page ```/page/3``` which contains FLAG0.
+
+(Alternate solution: Upon reviewing the hints, it suggests using a ```UNION``` injection. Therefore, ```UNION``` can be leveraged with keyword ```AS``` to get password from an alias rather than from the actual table e.g. Username: ```' UNION SELECT '1234' as password-- ``` and Password: ```1234``` successfully logs in and allows the viewing of private ```/page/3```. This is much simpler than the exploit that sqlmap found as seen in the following paragraphs.)
 
 #### FLAG0 is captured.
 
